@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-paper text-ink dark:bg-night dark:text-paper font-body antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+::selection {
+  background-color: theme("colors.gold.soft");
+  color: theme("colors.ink");
+}
+
+/* Focus visibility */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid theme("colors.teal.DEFAULT");
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(18, 23, 43, 0.08) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.dark .dot-grid {
+  background-image: radial-gradient(circle, rgba(246, 247, 242, 0.09) 1px, transparent 1px);
+}

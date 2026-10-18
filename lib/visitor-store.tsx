@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import type { VisitorState, BadgeRecord, RatingRecord } from "./types";
 import { ACHIEVEMENTS, PROJECTS, computeStats } from "./demo-data";
+import { supabase, isSupabaseConfigured } from "./supabase";
 
 const STORAGE_KEY = "khoj:visitor:v1";
 
@@ -13,7 +14,10 @@ function randomExplorerId() {
 
 function emptyState(): VisitorState {
   return {
-    explorerId: randomExplorerId(),
+    // Stable placeholder for the very first render (server + client must
+    // match exactly, or React throws a hydration error). The real random id
+    // gets assigned client-side only, in the mount effect below.
+    explorerId: "",
     displayName: null,
     badges: [],
     ratings: [],
@@ -43,6 +47,7 @@ type ScanResult =
 
 type VisitorContextValue = {
   state: VisitorState;
+  hydrated: boolean;
   isBadgeCollected: (projectId: string) => boolean;
   hasRated: (projectId: string) => boolean;
   collectBadge: (projectId: string) => ScanResult;
@@ -53,6 +58,43 @@ type VisitorContextValue = {
   clearNewlyUnlocked: () => void;
 };
 
+// Best-effort sync to Supabase so an admin can see cross-device activity.
+// Never blocks or throws into the caller — if Supabase isn't configured or
+// the request fails (e.g. offline), the local badge/rating still saved fine;
+// we just log a warning.
+async function syncVisitor(explorerId: string, displayName: string) {
+  if (!isSupabaseConfigured || !explorerId) return;
+  try {
+    await supabase
+      .from("visitors")
+      .upsert({ explorer_id: explorerId, display_name: displayName, last_seen_at: new Date().toISOString() });
+  } catch (err) {
+    console.warn("[khoj] visitor sync failed", err);
+  }
+}
+
+async function syncBadge(explorerId: string, projectId: string, collectedAt: string) {
+  if (!isSupabaseConfigured || !explorerId) return;
+  try {
+    await supabase
+      .from("badge_logs")
+      .upsert({ explorer_id: explorerId, project_id: projectId, collected_at: collectedAt });
+  } catch (err) {
+    console.warn("[khoj] badge sync failed", err);
+  }
+}
+
+async function syncRating(explorerId: string, projectId: string, rating: number, ratedAt: string) {
+  if (!isSupabaseConfigured || !explorerId) return;
+  try {
+    await supabase
+      .from("rating_logs")
+      .upsert({ explorer_id: explorerId, project_id: projectId, rating, rated_at: ratedAt });
+  } catch (err) {
+    console.warn("[khoj] rating sync failed", err);
+  }
+}
+
 const VisitorContext = createContext<VisitorContextValue | null>(null);
 
 export function VisitorProvider({ children }: { children: ReactNode }) {
@@ -61,7 +103,11 @@ export function VisitorProvider({ children }: { children: ReactNode }) {
   const [newlyUnlockedAchievements, setNewlyUnlocked] = useState<string[]>([]);
 
   useEffect(() => {
-    setState(loadState());
+    const loaded = loadState();
+    // First-ever visit: loadState() returned the placeholder empty id.
+    // Assign the real random id now, client-side only, so it never has to
+    // match anything the server rendered.
+    setState(loaded.explorerId ? loaded : { ...loaded, explorerId: randomExplorerId() });
     setHydrated(true);
   }, []);
 
@@ -100,6 +146,7 @@ export function VisitorProvider({ children }: { children: ReactNode }) {
       lastScannedAt: badge.collectedAt,
     }));
     if (unlocked.length) setNewlyUnlocked((prev) => [...prev, ...unlocked]);
+    syncBadge(state.explorerId, projectId, badge.collectedAt);
     return { status: "new", badge };
   }
 
@@ -114,6 +161,7 @@ export function VisitorProvider({ children }: { children: ReactNode }) {
       unlockedAchievements: [...s.unlockedAchievements, ...unlocked],
     }));
     if (unlocked.length) setNewlyUnlocked((prev) => [...prev, ...unlocked]);
+    syncRating(state.explorerId, projectId, rating, record.ratedAt);
     return { status: "saved" as const };
   }
 
@@ -122,12 +170,15 @@ export function VisitorProvider({ children }: { children: ReactNode }) {
   }
 
   function setDisplayName(name: string) {
-    setState((s) => ({ ...s, displayName: name.slice(0, 24) }));
+    const trimmed = name.slice(0, 24);
+    setState((s) => ({ ...s, displayName: trimmed }));
+    syncVisitor(state.explorerId, trimmed);
   }
 
   const value = useMemo(
     () => ({
       state,
+      hydrated,
       isBadgeCollected,
       hasRated,
       collectBadge,
@@ -138,7 +189,7 @@ export function VisitorProvider({ children }: { children: ReactNode }) {
       clearNewlyUnlocked: () => setNewlyUnlocked([]),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state, newlyUnlockedAchievements]
+    [state, hydrated, newlyUnlockedAchievements]
   );
 
   return <VisitorContext.Provider value={value}>{children}</VisitorContext.Provider>;

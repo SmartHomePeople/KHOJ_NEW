@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAdminGuard } from "@/lib/useAdminGuard";
+import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { PROJECTS, TEAMS, CATEGORIES, LOCATIONS } from "@/lib/demo-data";
 import { DEMO_AGGREGATES, getAggregate } from "@/lib/demo-aggregates";
@@ -10,14 +12,8 @@ import ProjectQrCode from "@/components/ProjectQrCode";
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const ready = useAdminGuard();
   const [qrProjectId, setQrProjectId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const ok = window.sessionStorage.getItem("khoj:admin-demo") === "1";
-    if (!ok) router.replace("/admin");
-    else setReady(true);
-  }, [router]);
 
   if (!ready) return null;
 
@@ -31,8 +27,8 @@ export default function AdminDashboard() {
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold md:text-3xl">KHOJ Admin</h1>
         <button
-          onClick={() => {
-            window.sessionStorage.removeItem("khoj:admin-demo");
+          onClick={async () => {
+	    await supabase.auth.signOut();
             router.push("/admin");
           }}
           className="text-sm text-ink/50 underline dark:text-paper/50"

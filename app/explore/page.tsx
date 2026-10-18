@@ -9,6 +9,8 @@ import { RatingStarsReadonly } from "@/components/RatingStars";
 import { getAggregate } from "@/lib/demo-aggregates";
 import type { Project } from "@/lib/types";
 import clsx from "clsx";
+import { useCompassHeading } from "@/lib/useCompassHeading";
+import { useFloorplan } from "@/lib/useFloorplan";
 
 const LOCATIONS_BY_ID = Object.fromEntries(LOCATIONS.map((l) => [l.id, l]));
 const CATEGORY_COLOR_BY_PROJECT = Object.fromEntries(
@@ -28,6 +30,8 @@ const FLOORS = [
   { id: 1, label: "First Floor" },
 ];
 
+
+
 function walkMinutes(fromId: string | null, toId: string): number {
   if (!fromId) return 3;
   const a = LOCATIONS_BY_ID[fromId]?.node;
@@ -44,6 +48,8 @@ export default function ExplorePage() {
   const [topFilter, setTopFilter] = useState<TopFilter>("All");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<Project | null>(null);
+  const floorplanUrl = useFloorplan(floor);
+  const { heading, needsPermission, requestPermission } = useCompassHeading();
 
   const filteredProjects = useMemo(() => {
     if (topFilter !== "All" && topFilter !== "Projects" && topFilter !== "My Location") return [];
@@ -142,16 +148,26 @@ export default function ExplorePage() {
         <div className="relative overflow-hidden rounded-xl2 border border-line bg-white shadow-card dark:border-white/10 dark:bg-white/5">
           <div className="aspect-[4/3] w-full md:aspect-[16/10]">
             <MapSvg
-              floor={floor}
-              projects={filteredProjects}
-              pois={filteredPois}
-              locationsById={LOCATIONS_BY_ID}
-              categoryColorByProjectId={CATEGORY_COLOR_BY_PROJECT}
-              currentLocationId={state.currentLocationId}
-              selectedProjectId={selected?.id}
-              onSelectProject={setSelected}
-            />
+ 		floor={floor}
+  		projects={filteredProjects}
+  		pois={filteredPois}
+  		locationsById={LOCATIONS_BY_ID}
+  		categoryColorByProjectId={CATEGORY_COLOR_BY_PROJECT}
+  		currentLocationId={state.currentLocationId}
+  		selectedProjectId={selected?.id}
+  		onSelectProject={setSelected}
+  		floorplanUrl={floorplanUrl}
+  		heading={heading}
+	    />
           </div>
+	  {needsPermission && (
+  		<button
+    	          onClick={requestPermission}
+    		  className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium shadow-card dark:bg-night/90"
+  		>
+    		  🧭 Enable compass
+  		</button>
+	  )}
 
           {/* Location checkpoint simulator — stands in for scanning a location QR code */}
           <div className="border-t border-line bg-mist/40 px-4 py-3 dark:border-white/10 dark:bg-white/5">
